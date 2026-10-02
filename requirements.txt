@@ -1,0 +1,75 @@
+# ===========================
+# Core AI
+# ===========================
+groq
+python-dotenv
+
+# ===========================
+# LangChain
+# ===========================
+langchain
+langchain-core
+langchain-community
+langchain-chroma
+langchain-huggingface
+langchain-groq
+langgraph
+
+# ===========================
+# Embeddings
+# ===========================
+sentence-transformers
+transformers
+torch
+einops
+
+# ===========================
+# Vector Database
+# ===========================
+chromadb
+faiss-cpu
+
+# ===========================
+# Sparse Retrieval
+# ===========================
+rank_bm25
+
+# ===========================
+# PDF Processing
+# ===========================
+pypdf
+pymupdf
+
+# ===========================
+# Backend & Database
+# ===========================
+fastapi
+uvicorn[standard]
+pydantic
+sqlalchemy
+pyjwt
+bcrypt
+reportlab
+
+# ===========================
+# File Upload
+# ===========================
+python-multipart
+
+# ===========================
+# Data Processing
+# ===========================
+numpy
+pandas
+
+# ===========================
+# OCR (Tomorrow)
+# ===========================
+easyocr
+Pillow
+opencv-python-headless
+
+# ===========================
+# Optional
+# ===========================
+typesense
