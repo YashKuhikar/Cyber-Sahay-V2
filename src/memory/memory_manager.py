@@ -26,17 +26,33 @@ class MemoryManager:
     def _get_db(self):
         return SessionLocal()
 
+    def _ensure_hydrated(self, session_id: str):
+        """
+        Ensures conversation history is loaded from SQLite before appending
+        new in-memory items, preventing cache overwrite after restart.
+        """
+        if session_id not in self.messages or len(self.messages[session_id]) == 0:
+            self.get_history(session_id)
+
     def add_user_message(self, session_id: str, message: str):
+        self._ensure_hydrated(session_id)
         self.messages[session_id].append({
             "role": "user",
             "content": message,
         })
 
     def add_ai_message(self, session_id: str, message: str):
+        self._ensure_hydrated(session_id)
         self.messages[session_id].append({
             "role": "assistant",
             "content": message,
         })
+
+    def get_messages(self, session_id: str) -> List[dict]:
+        """
+        Alias for get_history to satisfy coordinator agent interface.
+        """
+        return self.get_history(session_id)
 
     def get_history(self, session_id: str) -> List[dict]:
         # If in cache, return
@@ -126,7 +142,19 @@ class MemoryManager:
             self.profiles[session_id] = profile
             profile_dict = profile.model_dump()
         elif isinstance(profile, dict):
-            profile_dict = profile
+            if "incident" in profile and "victim" in profile:
+                try:
+                    v2 = CaseProfileV2.model_validate(profile)
+                    self.profiles[session_id] = v2
+                    profile_dict = profile
+                except Exception:
+                    profile_dict = profile
+            else:
+                from .case_profile_v2 import update_case_profile_v2
+                existing_v2 = self.get_case_profile_v2(session_id)
+                merged_v2 = update_case_profile_v2(existing_v2, profile, source="update")
+                self.profiles[session_id] = merged_v2
+                profile_dict = merged_v2.model_dump()
         else:
             profile_dict = {}
 
@@ -173,7 +201,11 @@ class MemoryManager:
                 self.profiles[session_id] = v2
                 return v2.to_legacy_dict()
             except Exception:
-                return db_profile
+                from .case_profile_v2 import update_case_profile_v2
+                v2 = create_case_profile_v2()
+                v2 = update_case_profile_v2(v2, db_profile, source="database")
+                self.profiles[session_id] = v2
+                return v2.to_legacy_dict()
 
         return {}
 
@@ -181,14 +213,34 @@ class MemoryManager:
         if session_id in self.profiles:
             return self.profiles[session_id]
 
-        profile_dict = self.get_case_profile(session_id)
-        if profile_dict:
+        db_profile = None
+        if session_id in self.state and "case_profile" in self.state[session_id]:
+            prof = self.state[session_id]["case_profile"]
+            if isinstance(prof, dict):
+                db_profile = prof
+
+        if not db_profile:
+            db = self._get_db()
             try:
-                prof = CaseProfileV2.model_validate(profile_dict)
-                self.profiles[session_id] = prof
-                return prof
+                sess = db.query(ChatSession).filter(ChatSession.session_id == session_id).first()
+                if sess and sess.case_profile_json:
+                    db_profile = json.loads(sess.case_profile_json)
             except Exception:
                 pass
+            finally:
+                db.close()
+
+        if db_profile:
+            try:
+                v2 = CaseProfileV2.model_validate(db_profile)
+                self.profiles[session_id] = v2
+                return v2
+            except Exception:
+                from .case_profile_v2 import update_case_profile_v2
+                v2 = create_case_profile_v2()
+                v2 = update_case_profile_v2(v2, db_profile, source="database")
+                self.profiles[session_id] = v2
+                return v2
 
         new_prof = create_case_profile_v2()
         self.profiles[session_id] = new_prof

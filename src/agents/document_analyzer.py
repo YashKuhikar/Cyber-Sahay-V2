@@ -4,6 +4,7 @@ import json
 
 from groq import Groq
 
+from ..security.prompt_guard import wrap_untrusted_content
 from ..utils.helpers import safe_json_loads
 from ..config import (
     GROQ_API_KEY,
@@ -27,6 +28,8 @@ class DocumentAnalyzer:
         text: str,
     ) -> dict:
 
+        safe_text = wrap_untrusted_content("untrusted_document_ocr", text)
+
         prompt = f"""
 You are CyberSahay's AI Document Analyzer.
 
@@ -34,7 +37,7 @@ Document Type:
 {document_type}
 
 OCR Text:
-{text}
+{safe_text}
 
 Analyze this document and provide:
 

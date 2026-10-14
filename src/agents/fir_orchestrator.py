@@ -86,7 +86,17 @@ class FIROrchestrator:
         # 1. Check if already generated and ready
         existing_record = None
         if db is not None:
+            from ..database.models import ChatSession
+            from ..security.auth_guard import verify_session_ownership, verify_fir_ownership
+
+            db_session = db.query(ChatSession).filter(ChatSession.session_id == session_id).first()
+            if db_session:
+                verify_session_ownership(db_session, current_user)
+
             existing_record = db.query(FIRRecord).filter(FIRRecord.session_id == session_id).first()
+            if existing_record:
+                verify_fir_ownership(existing_record, current_user)
+
         if existing_record and existing_record.status == "ready" and existing_record.fir_draft_text:
             return FIROrchestrationResult(
                 status="ready",
@@ -247,12 +257,21 @@ class FIROrchestrator:
         current_field = memory.get_state(session_id, "current_field")
         active_workflow = memory.get_state(session_id, "workflow")
 
-        # Recover from DB if memory was cleared/restarted
-        if not form and db is not None:
+        # Recover from DB if memory was cleared/restarted and verify ownership
+        if db is not None:
+            from ..database.models import ChatSession
+            from ..security.auth_guard import verify_session_ownership, verify_fir_ownership
+
+            db_session = db.query(ChatSession).filter(ChatSession.session_id == session_id).first()
+            if db_session:
+                verify_session_ownership(db_session, current_user)
+
             rec = db.query(FIRRecord).filter(FIRRecord.session_id == session_id).first()
             if rec:
-                form = rec.form_data
-                current_field = self._calculate_missing_fields(form)[0] if self._calculate_missing_fields(form) else None
+                verify_fir_ownership(rec, current_user)
+                if not form:
+                    form = rec.form_data
+                    current_field = self._calculate_missing_fields(form)[0] if self._calculate_missing_fields(form) else None
 
         # Handle multiple incident resolution
         if active_workflow == "fir_incident_selection":

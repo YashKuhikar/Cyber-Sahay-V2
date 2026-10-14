@@ -16,14 +16,16 @@ from ..agents.ocr_agent import OCRAgent
 from ..agents.response_formatter import ResponseFormatter
 from ..agents.shared_agents import coordinator
 from ..database.db import get_db
-from ..database.models import DocumentAnalysisRecord, EvidenceRecord, User
+from ..database.models import ChatSession, DocumentAnalysisRecord, EvidenceRecord, User
 from ..memory.case_profile_v2 import update_case_profile_v2
 from ..memory.shared_memory import memory
 from ..ocr.timeline_builder import build_evidence_timeline
+from ..security.auth_guard import verify_session_ownership
 from ..security.file_validator import validate_uploaded_file
 from ..security.rate_limiter import rate_limit
 from ..security.sanitizer import sanitize_input
 from ..services.auth_service import get_current_user, get_optional_user
+from .fir import fir_orchestrator
 
 router = APIRouter()
 ocr_agent = OCRAgent()
@@ -76,6 +78,11 @@ async def extract_text(
 ):
     saved_filepath = None
     try:
+        if session_id:
+            db_session = db.query(ChatSession).filter(ChatSession.session_id == session_id).first()
+            if db_session:
+                verify_session_ownership(db_session, current_user)
+
         suffix, file_size = await validate_uploaded_file(file)
 
         # 1. Compute SHA-256 hash of original file without modification
@@ -197,6 +204,11 @@ async def create_fir_from_document(
 ):
     try:
         session_id = sanitize_input(session_id).strip()
+        if session_id:
+            db_session = db.query(ChatSession).filter(ChatSession.session_id == session_id).first()
+            if db_session:
+                verify_session_ownership(db_session, current_user)
+
         suffix, file_size = await validate_uploaded_file(file)
 
         file_bytes = await file.read()
@@ -240,9 +252,11 @@ async def create_fir_from_document(
         )
         memory.set_case_profile(session_id, profile_v2)
 
-        fir_result = coordinator.start_fir_from_entities(
+        # Route into canonical FIROrchestrator with confirmation checklist
+        fir_result = fir_orchestrator.start_workflow(
             session_id=session_id,
-            entities=information,
+            db=db,
+            current_user=current_user,
         )
 
         return success_response(
@@ -254,7 +268,7 @@ async def create_fir_from_document(
                 "document_type": result["classification"]["document_type"],
                 "information": information,
                 "timeline": timeline,
-                "fir": fir_result,
+                "fir": fir_result.model_dump(),
             },
         )
 

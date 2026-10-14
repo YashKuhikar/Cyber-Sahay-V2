@@ -76,6 +76,26 @@ class SemanticCache:
 
             return None
 
+    @staticmethod
+    def contains_pii_or_incident_facts(query: str, response: str) -> bool:
+        """
+        Detects personal identifying information (PII) or victim-specific incident
+        details (phone numbers, UPI IDs, OTPs, transaction IDs) to prevent caching
+        and leaking private incident facts across victims.
+        """
+        import re
+        text = f"{query} {response}"
+        # Indian phone numbers
+        if re.search(r"\b[6-9]\d{9}\b", text):
+            return True
+        # UPI handles
+        if re.search(r"\b[\w.-]+@(?:ok[a-zA-Z]+|okhdfcbank|oksbi|paytm|ybl|axl|ibl)\b", text, re.IGNORECASE):
+            return True
+        # Personal incident credentials / identifiers
+        if re.search(r"\b(?:otp|transaction id|utr|account number|debit card|credit card|cvv|password)\b", text, re.IGNORECASE):
+            return True
+        return False
+
     def set(
         self,
         query: str,
@@ -85,7 +105,12 @@ class SemanticCache:
     ) -> None:
         """
         Store a new query-response pair in the semantic cache.
+        Skips caching if the query or response contains PII or incident-specific data.
         """
+        if self.contains_pii_or_incident_facts(query, response):
+            logger.info("Semantic Cache: Skipping caching due to victim PII or sensitive incident facts.")
+            return
+
         with self._lock:
             # Evict oldest if max capacity reached
             if len(self._queries) >= self.max_size:

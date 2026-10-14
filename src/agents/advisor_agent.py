@@ -3,6 +3,7 @@ from __future__ import annotations
 from ..config import GROQ_API_KEY, GROQ_MODEL, MAX_TOKENS
 from groq import Groq
 
+from ..security.prompt_guard import wrap_untrusted_content
 from .retrieval_agent import RetrievalAgent
 
 
@@ -23,17 +24,20 @@ class AdvisorAgent:
         context_text: str,
         history_text: str,
     ) -> str:
+        safe_message = wrap_untrusted_content("user_question", message)
+        safe_context = wrap_untrusted_content("retrieved_knowledge_base", context_text)
+
         return f"""
 You are CyberSahay's Legal/Cyber Safety Advisor.
 
 User's question:
-{message}
+{safe_message}
 
 Category:
 {category}
 
 Relevant information from CyberSahay's knowledge base:
-{context_text}
+{safe_context}
 
 Conversation history:
 {history_text}
@@ -123,6 +127,7 @@ Return only the helpful advisory answer.
         return {
             "response": answer.strip(),
             "sources": sources,
+            "contexts": [getattr(c, "page_content", str(c)) for c in contexts] if contexts else [],
         }
 
     def handle_stream(

@@ -18,12 +18,12 @@ from ..agents.fir_extractor import (
     INCIDENT_REQUIREMENTS,
 )
 from ..database.db import get_db
-from ..database.models import FIRRecord, User, ChatMessage
+from ..database.models import FIRRecord, User, ChatMessage, ChatSession
 from ..memory.shared_memory import memory
 from ..memory.case_profile import create_case_profile, update_case_profile
 from ..services.auth_service import get_current_user, get_optional_user
 from ..services.pdf_service import generate_fir_pdf
-from ..security.auth_guard import verify_fir_ownership
+from ..security.auth_guard import verify_fir_ownership, verify_session_ownership
 
 
 router = APIRouter()
@@ -278,7 +278,20 @@ def generate_fir_direct(
     "/status/{session_id}",
     summary="Check active FIR workflow status for a session",
 )
-def fir_status(session_id: str, db: Session = Depends(get_db)):
+def fir_status(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    session_id = sanitize_input(session_id).strip()
+    db_rec = db.query(FIRRecord).filter(FIRRecord.session_id == session_id).first()
+    if db_rec:
+        verify_fir_ownership(db_rec, current_user)
+
+    db_session = db.query(ChatSession).filter(ChatSession.session_id == session_id).first()
+    if db_session:
+        verify_session_ownership(db_session, current_user)
+
     form = memory.get_state(session_id, "fir_form", {})
     fir_draft = memory.get_state(session_id, "fir_draft", None)
     current_field = memory.get_state(session_id, "current_field")

@@ -501,14 +501,15 @@ class CoordinatorAgent:
         )
         answer = advisor_result.get("response", "")
         sources = advisor_result.get("sources", [])
+        contexts = advisor_result.get("contexts", [])
 
         verification = self.verifier_agent.verify(
             query=query,
             response_text=answer,
-            retrieved_contexts=sources,
+            retrieved_contexts=contexts,
             user_facts={"amount": profile_v2.financial.amount},
             intent_confidence=intent_conf,
-            retrieval_confidence=0.88,
+            retrieval_confidence=0.88 if contexts else 0.40,
         )
 
         final_answer = verification.sanitized_response

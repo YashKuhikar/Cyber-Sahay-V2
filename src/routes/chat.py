@@ -249,10 +249,48 @@ def chat_stream(
     db.add(user_chat_record)
     db.commit()
 
-    # 3. Stream generator
+    # 3. Stream generator with message persistence
     def sse_event_generator():
+        accumulated_chunks = []
+        last_payload = {}
         for chunk in agent.handle_stream(session_id, user_msg):
+            try:
+                if chunk.startswith("data: "):
+                    payload = json.loads(chunk[6:].strip())
+                    last_payload = payload
+                    if "token" in payload and payload["token"]:
+                        accumulated_chunks.append(payload["token"])
+            except Exception:
+                pass
             yield chunk
+
+        # Persist streamed assistant response to database
+        full_response = "".join(accumulated_chunks) or last_payload.get("token", "")
+        if full_response:
+            from ..database.db import SessionLocal
+            stream_db = SessionLocal()
+            try:
+                ai_chat_record = ChatMessage(
+                    session_id=session_id,
+                    sender="assistant",
+                    message=full_response,
+                    intent=last_payload.get("intent", "advice"),
+                    workflow=last_payload.get("workflow", "advisor"),
+                    category=last_payload.get("category", "general"),
+                    confidence=1.0,
+                    sources_json=json.dumps(last_payload.get("sources", [])),
+                )
+                stream_db.add(ai_chat_record)
+                stream_sess = stream_db.query(ChatSession).filter(ChatSession.session_id == session_id).first()
+                if stream_sess:
+                    stream_sess.workflow = last_payload.get("workflow", "advisor")
+                    stream_sess.category = last_payload.get("category", "general")
+                    stream_sess.updated_at = datetime.utcnow()
+                stream_db.commit()
+            except Exception:
+                stream_db.rollback()
+            finally:
+                stream_db.close()
 
     return StreamingResponse(
         sse_event_generator(),
@@ -325,7 +363,6 @@ def get_session_messages(
     )
 
     return [
-
         MessageItem(
             id=m.id,
             sender=m.sender,
@@ -357,12 +394,8 @@ def delete_session(
             detail="Session not found.",
         )
 
-    # If owned by a user, verify ownership
-    if db_session.user_id and current_user and db_session.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to delete this session.",
-        )
+    # Strictly verify ownership against IDOR / session hijacking
+    verify_session_ownership(db_session, current_user)
 
     # Delete messages and session
     db.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()

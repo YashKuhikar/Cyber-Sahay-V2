@@ -129,10 +129,15 @@ class VerifierAgent:
             )
 
         # 6. Calculate Verification & Grounding Scores
-        if issues:
-            grounding_score = max(0.60, 1.0 - (len(issues) * 0.12))
-            verification_score = max(0.65, 1.0 - (len(issues) * 0.10))
-            is_verified = len(issues) <= 1  # Minor issues pass with warnings
+        if not retrieved_contexts:
+            grounding_score = 0.0
+            verification_score = 0.50
+            is_verified = False
+            issues.append("No authoritative knowledge base contexts retrieved to ground this response.")
+        elif issues:
+            grounding_score = max(0.40, round(1.0 - (len(issues) * 0.15), 2))
+            verification_score = max(0.45, round(1.0 - (len(issues) * 0.12), 2))
+            is_verified = len(issues) == 0
         else:
             grounding_score = 0.95
             verification_score = 0.98
