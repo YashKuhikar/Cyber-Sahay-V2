@@ -23,4 +23,24 @@ dependencies = [
     "rank-bm25>=0.2.2",
     "sentence-transformers>=5.6.1",
     "typesense>=2.0.0",
+    "torch",
+    "fastapi>=0.143.0",
+    "pydantic>=2.13.4",
+    "sqlalchemy>=2.0.51",
+    "pyjwt>=2.15.1",
+    "bcrypt>=5.0.0",
+    "reportlab>=5.0.1",
+    "python-multipart>=0.0.32",
+    "numpy>=2.5.1",
+    "pandas>=3.0.6",
+    "easyocr>=1.7.2",
+    "pillow>=12.3.0",
+    "opencv-python-headless>=5.0.0.93",
 ]
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

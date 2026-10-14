@@ -1,0 +1,9 @@
+
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "src/main.py": {
+      "excludeFiles": "{Knowledge-Base/**,tests/**,**/test_*.py,uploads/**,logs/**,*.db,**/*.db,**/*.sqlite3,**/*.log,**/__pycache__/**}"
+    }
+  }
+}
